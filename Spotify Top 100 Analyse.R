@@ -1,266 +1,205 @@
-library(ggplot2)
-library(dplyr)
+# Libraries
+library(tidyverse)
 library(reshape2)
+library(extrafont)
+font_import() # Used for Roboto
 
-# Beispel Spotify Top 100 aus 2017
-top100<-read.csv("featuresdf.csv")
+# ------------------------- #
+# Spotify Top 100 Songs 2017 Analysis
+# ------------------------- #
 
-# Nummerierung einf??gen
-top100$platz<-1:100
+# 1. Loading the Data #### 
+top100 <- read.csv("featuresdf.csv") %>% 
+  mutate(position = 1:100, # Adding the Rank of the Song
+         duration = duration_ms / 1000 / 60) %>% 
+  select(-duration_ms)
 
-# Visualisierung einzelner Faktoren ####
+tibble(top100)
 
-#Platzierung und Danceability
-plot(top100$platz, top100$danceability, pch = 16)
-plot(top100$platz, top100$energy)
-plot(top100$platz, top100$key)
-plot(top100$platz, top100$loudness)
-plot(top100$platz, top100$mode)
-plot(top100$platz, top100$speechiness)
-plot(top100$platz, top100$acousticness)
-plot(top100$platz, top100$instrumentalness)
-plot(top100$platz, top100$liveness)
-plot(top100$platz, top100$valence)
-plot(top100$platz, top100$tempo)
-plot(top100$platz, top100$duration_ms)
-plot(top100$platz, top100$time_signature)
 
-# Ziel: Herausfinden wie stark einzelne Faktoren auf die Platzierung des Songs Einfluss haben ####
+# 2. Exploratory Visualization #####
 
-Regression_top100<-lm(data = top100, platz~key+valence)
+# Plotting each Variable against the Position inside the Top 100
+top100_explore <- top100 %>% 
+  select(-id) %>% 
+  pivot_longer(cols = c(3:14, 16), names_to = "variable", values_to = "value") %>% 
+  mutate(value = round(value, 4))
+
+# Visual to see if there are strong correlation between position and a singel Variable
+p <- ggplot(top100_explore, aes(x = position, y = value)) +
+  geom_point(alpha = 0.6, ) +
+  geom_smooth(color = "#0096c7") +
+  facet_wrap(vars(variable), scales = "free_y", ) +
+  
+  theme_minimal() +
+  theme(text=element_text(family="Roboto Medium", size = 18),
+        panel.spacing = unit(8, "mm")) +
+  labs(title = "Expl. Visualization of Top 100 Variables", subtitle = "Note: Different Y Scale for each Plot", 
+       x = "Position of the Song", y = "Value of the Variable")
+
+ggsave(plot = p, "Plots/expl_allVariable_roboto.jpeg", width = 16, height = 10)
+
+# 3. Linear Regression ####
+
+# Using all Factors
+Regression_top100 <- lm(data = top100, position ~ 
+                          acousticness + key + valence + danceability + duration + energy +
+                          instrumentalness + liveness + loudness + mode + speechiness + tempo + 
+                          time_signature)
 summary(Regression_top100)
 
-# Ergebnis:
-# 1.      Key hat meisten Einfluss auf die Platzierung
-# 2.      Valence (die Fröhlichkeit des Tracks) hat auch Einfluss auf die Platzierung
+# Only the most important
+Regression_top100 <- lm(data = top100, position ~ 
+                          key + valence)
+summary(Regression_top100)
 
+# 1.  Key is the most significant Factor, with a p-value of 0.0271 however not significant enough
+# 2.  Valence of a track is the other close to significant factor, having a much bigger positive impact on the position (Estimate -24.1)
 
-# 1. Key
-Regression_top100_key<-lm(top100$key~top100$platz)
+# _ 3.1. Key ####
+Regression_top100_key<-lm(top100$key~top100$position)
 summary(Regression_top100_key)
 
-# Visualierung
-plot(top100$platz, jitter(top100$key), pch = 16)
+plot(top100$position, jitter(top100$key), pch = 16)
 abline(Regression_top100_key)
 
-ggplot(data = top100, mapping = aes(x = platz, y = key)) +
-  geom_jitter() +
-  geom_smooth(method = lm)
+# Or
+ggplot(data = top100, mapping = aes(x = position, y = key)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = lm, se = FALSE, color = "#0096c7") + 
+  
+  theme_minimal() +
+  theme(text=element_text(family="Roboto Medium")) +
+  scale_y_continuous(limits = c(0,11), breaks = seq(0, 11, 1)) +
+  labs(title = "Lin. Regr. between Key and Top 100 Position", subtitle = "1 = C, 2 = D, ..., 7 = B",
+       y = "Key Value", x = "Position", caption = "Regression is not significant, but the most sign. in the Dataset (p-value 0.026)")
 
+ggsave("Plots/lm_key.jpeg", width = 6, height = 4)
 
-# 2. Valence
-Regression_top100_valence<-lm(top100$valence~top100$platz)
+# _ 3.2. Valence ####
+Regression_top100_valence<-lm(top100$valence~top100$position)
 summary(Regression_top100_valence)
 
 plot(top100$platz, top100$valence, pch = 16)
 abline(Regression_top100_valence)
 
-ggplot(data = top100, mapping = aes(x = platz, y = valence)) +
-  geom_jitter() +
-  geom_smooth(method = lm)
+# Or
+ggplot(data = top100, mapping = aes(x = position, y = valence)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = lm, se = FALSE, color = "#0096c7") + 
+  
+  theme_minimal() +
+  scale_y_continuous(limits = c(0,1)) +
+  theme(text=element_text(family="Roboto Medium")) +
+  labs(title = "Lin. Regr. between Valence and Top 100 Position", subtitle = "1 = C, 2 = D, ..., 7 = B",
+       y = "Valence Value", x = "Position", caption = "Regression is not significant, but has the biggest impact and is slightly sign. (p-value 0.0656)")
+
+ggsave("Plots/lm_valence.jpeg", width = 6, height = 4)
 
 
-# Idee: Wird ein bestimmer Key mit mehr Fr??hlichkeit verbunden?    ####
 
-Regression_top100_keyXvalence<-lm(top100$valence~top100$key+I(top100$key^2)+I(top100$key^3)+I(top100$key^4))
+# 4. Hypothesis: Is a certain Key happier than others? ####
+
+# _ 4.1 Key and Valence ####
+# Trying a Linear Regression
+Regression_top100_keyXvalence<-lm(top100$valence~top100$key + top100$mode)
 summary(Regression_top100_keyXvalence)
-abline(Regression_top100_keyXvalence)
-# -> Keine Regression
+# -> Not significant
 
-# Means der einzelnen Keys
-mean(top100$valence[top100$key == "1"])     # 0.556
-mean(top100$valence[top100$key == "2"])     # 0.516
-mean(top100$valence[top100$key == "3"])     # 0.777
-mean(top100$valence[top100$key == "4"])     # 0.438
-mean(top100$valence[top100$key == "5"])     # 0.483
-mean(top100$valence[top100$key == "6"])     # 0.469
-mean(top100$valence[top100$key == "7"])     # 0.583
-mean(top100$valence[top100$key == "8"])     # 0.513
-mean(top100$valence[top100$key == "9"])     # 0.557
-mean(top100$valence[top100$key == "10"])    # 0.6252
-mean(top100$valence[top100$key == "11"])    # 0.46
+# Mean of a certain key
+top100_meanKey <- top100 %>% 
+  group_by(key) %>% 
+  summarize(mean = mean(valence),
+            sd = sd(valence),
+            n = n())
 
-top100_meanValence<-c(mean(top100$valence[top100$key == "0"]), mean(top100$valence[top100$key == "1"]),
-                      mean(top100$valence[top100$key == "2"]),mean(top100$valence[top100$key == "3"]),
-                      mean(top100$valence[top100$key == "4"]),mean(top100$valence[top100$key == "5"]),
-                      mean(top100$valence[top100$key == "6"]),mean(top100$valence[top100$key == "7"]),
-                      mean(top100$valence[top100$key == "8"]),mean(top100$valence[top100$key == "9"]),
-                      mean(top100$valence[top100$key == "10"]),mean(top100$valence[top100$key == "11"]))
+ggplot(data = top100, mapping = aes(x = key, y = valence)) +
+  geom_point(alpha = 0.8) +
+  geom_line(data = top100_meanKey, aes(x = key, y = mean),color = "#0096c7") +
+  theme_minimal() +
+  scale_y_continuous(limits = c(0,1)) +
+  scale_x_continuous(limits = c(0,11), breaks = seq(0, 11, 1)) +
+    
+  theme(text=element_text(family="Roboto Medium")) +
+  labs(title = "All Keys can be happy", subtitle = "Key and Mean Valence Value",
+       x = "Key", y = "Valence", caption = "No sign. Correlation found")
 
-plot(top100$key, top100$valence, pch = 16)
-points(0:11, top100_meanValence, pch = 16, col = "red", type = "line")
+ggsave("Plots/valence_key.jpeg", width = 6, height = 4)
 
-ggplot() +
-  geom_line(mapping = aes(x= 0:11, y = top100_meanValence), col = "red") +
-  geom_point(mapping = aes(x = top100$key, y = top100$valence)) +
-  theme_get()
+# No viewable correlation between Key and Valence
 
-# Ergebnis: Nein, die Valence ist nicht durch die Tonart bedingt
+# _ 4.2 Adding the mode ####
+
+top100_meanKey <- top100 %>% 
+  group_by(key, mode) %>% 
+  summarize(mean = round(mean(valence), 2),
+            sd = sd(valence),
+            n = n())
 
 
-# Idee: Heatmap aller Faktoren untereinander um zu sehen was sich bestimmt ####
+ggplot(top100_meanKey, aes(x = key, y = mode)) +
+  geom_tile(aes(fill = mean)) +
+  geom_text(aes(label = mean)) +
+  
+  theme_minimal() +
+  scale_y_continuous(limits = c(-0.5,1.5), breaks = c(0,1)) +
+  scale_x_continuous(limits = c(-0.5,11.5), breaks = seq(0, 11, 1)) +
+  
+  theme(text=element_text(family="Roboto Medium"), 
+        legend.position = "none") +
+  labs(title = "Can Mode change the View?", subtitle = "Key+Mode and Mean Valence Value",
+       x = "Key", y = "Mode", caption = "No sign. Correlation found")
+
+ggsave("Plots/valence_keymode.jpeg", width = 6, height = 4)
+
+# 5. Hypothesis: Certain Variables are strong predictors for others ####
 
 # Get lower triangle of the correlation matrix
 get_lower_tri<-function(cormat){
   cormat[upper.tri(cormat)] <- NA
   return(cormat)
 }
-# Get upper triangle of the correlation matrix
-get_upper_tri <- function(cormat){
-  cormat[lower.tri(cormat)]<- NA
-  return(cormat)
-}
-
 
 top100_corMatrix <- get_lower_tri(cor(top100[,4:17]))
 top100_corMatrix_melt <- melt(top100_corMatrix, na.rm = T)
 
 ggplot(data = top100_corMatrix_melt, mapping = aes(x = Var1, y = Var2, fill = value)) +
   geom_tile(color = "white") +
+  geom_text(aes(label = round(value, 2)), size = 2.3) +
   scale_fill_gradient2(low = "red", high = "green", mid = "white", midpoint = 0, 
                        limit = c(-1,1), space = "Lab") +
-  theme(axis.text.x = element_text(angle = 45, vjust = 1, size = 12, hjust = 1)) +
-  coord_fixed()
-
+  
+  coord_fixed() +
+  
+  theme_minimal() +
+  theme(text=element_text(family="Roboto Medium"),
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  labs(title = "Cor. Matrix between all Variables", caption = "Hidden upper Trinangle due to duplicate Information",
+       x = NULL, y = NULL)
+  
+ggsave("Plots/cor_matrix Variables.jpeg", width = 8, height = 6)
 
 # Ergebnis: 
 # Die gr????ten Signifikanzen findet man bei:
-#   Energy x Loudness        ++       check
-#   Speechness x Loudness    --       check
-#   Valence x Danceability   +        check
-#   Tempo x Valence          -        check
-#   Tempo x Danceability     -        check
-#   Valence x Loudness       +        check
+#   Energy x Loudness        ++ 
+#   Speechness x Loudness    -- 
+#   Valence x Danceability   +  
+#   Tempo x Valence          -  
+#   Tempo x Danceability     -
+#   Valence x Loudness       +      
 
-# Energy 
-Regression_top100_energy<-lm(data = top100, energy~acousticness + loudness)
-summary(Regression_top100_energy)
+# 6. What is the best BPM to dance to? ####
 
-ggplot(mapping = aes(x = top100$loudness, y = top100$energy)) +
+ggplot(data = top100, aes(x = tempo, y = danceability)) +
   geom_point() +
-  #geom_abline(intercept = 0.980971, slope = 0.053030, col = "red") +
-  geom_smooth(method = lm, se = F, col = "red") +
-  theme_get()
-
-ggplot(mapping = aes(x = top100$acousticness, y = top100$energy)) +
-  geom_point() +
-  #geom_abline(intercept = 0.69583, slope = -0.21128, col = "red") +
-  geom_smooth(method = lm, se = F, col = "red")
-  theme_get()
-
-
-# Loudness
-Regression_top100_loudness<-lm(data = top100, loudness~speechiness)
-summary(Regression_top100_loudness)
-
-ggplot() +
-  geom_point(mapping = aes(x = top100$valence, y = top100$loudness)) +
-  geom_abline(intercept = -6.4208, slope = 3.0205, col = "red") +
-  theme_get()
+  geom_smooth(se = F, color = "#0096c7") +
   
-ggplot() +
-  geom_point(mapping = aes(x = top100$speechiness, y = top100$loudness)) +
-  geom_abline(intercept = -4.7793, slope = -8.4, col = "red") +
-  theme_get()
-  
+  scale_y_continuous(limits = c(0,1)) +
+  theme_minimal() +
+  theme(text=element_text(family="Roboto Medium"), 
+        legend.position = "none") +
+  labs(title = "Around 120BPM has the best danceability", subtitle = "BPM/Tempo to Danceability",
+       x = "BPM", y = "Danceability")
 
-# Danceability
-Regression_top100_dance<-lm(data = top100, danceability~tempo+valence)
-summary(Regression_top100_dance)
-
-ggplot(mapping = aes(x = top100$valence, y = top100$danceability)) +
-  geom_point() +
-  #geom_abline(intercept = 0.7337221, slope = 0.2002868, col = "red") +
-  geom_smooth(method = lm) +
-  theme_get()
-
-ggplot(mapping = aes(x = top100$tempo, y = top100$danceability)) +
-  geom_point() +
-  #geom_abline(intercept = 0.7337221, slope = -0.0011783, col = "red") +
-  geom_smooth(method = lm) +
-  theme_get()
-
-# valence
-Regression_top100_valence<-lm(data = top100, valence~tempo)
-summary(Regression_top100_valence)
-
-ggplot(mapping = aes(x = top100$tempo, y = top100$valence)) +
-  geom_point() +
-  #geom_abline(intercept = 0.7864430, slope = -0.0022600, col = "red") +
-  geom_smooth(method = lm, col="red") +
-  theme_get()
-
-
-# Idee: H??ngen die Tonart und die Fr??hlichkeit zusammen? ####
-
-mean(top100$valence[top100$mode == "1"])
-mean(top100$valence[top100$mode == "0"])
-
-plot(top100$mode, top100$valence)
-points(0:1, c(0.5127966, 0.5229214), col = "red", pch = 16)
-
-# Nicht wirklich, eine Dur Tonart ist nur minimal "fr??hlicher" als Moll
-
-
-
-
-# Idee: Wie ist das Tempo der Top 100 verteilt? Welches ist das beste zum Tanzen? Welches hat die meiste Energy?  ####
-plot(top100$tempo, top100$valence)
-plot(top100$tempo, top100$danceability)
-plot(top100$tempo, top100$acousticness)
-
-mean(top100$tempo)
-hist(top100$tempo, nclass = 20)
-
-Regression_top100_tempo<-lm(data = top100, tempo~danceability+I(danceability^2))
-summary(Regression_top100_tempo)
-
-ggplot(mapping = aes(x = top100$tempo, y = top100$danceability)) +
-  geom_point() +
-  geom_smooth() +
-  theme_get()
-
-ggplot(mapping = aes(x = top100$tempo, y = top100$valence)) +
-  geom_point() +
-  geom_smooth(method = lm) +
-  theme_get()
-
-ggplot(mapping = aes(x = top100$tempo, y = top100$acousticness)) +
-  geom_point() +
-  geom_smooth(method = lm) +
-  theme_get()
-
-# Ergebnis: 
-# Das Tempo hat gro??en Einfluss auf die Tanzbarkeit, Fr??hlichkeit und Acousticness des Songs
-
-
-# GGplot2 ??ben ####
-
-ggplot(data = top100) +
-  geom_point(mapping = aes(x = platz, y = valence, color = artists))
-
-
-
-
-
-
-# Endergebnis:       ##### 
-# Der Platz in den Top 100 ist nur durch zwei Faktoren signifkikant bedingt:
-# 1.  Die Tonart
-# 2.  Die wahrgenommene Fr??hlichkeit
-#
-# Demnach gilt, je näher die Tonart an C dran ist, desto besser ist der Song in den Top 100 platziert
-# (H wäre hier am weitesten entfernt, obwohl es nur einen Ton unter C liegt)
-#
-# Je fr??hlicher ein Song wahrgenommen wird (durch z.B. den Text) desto besser ist er in den Top 100 platziert
-#
-#
-# Zudem bedingen sich Teile der Faktoren gegenseitig. Logische Zusammenh??nge zeigen sich z.B. bei der 
-# starken Korelation aus Loudness und Energy (je lauter ein Song ist, desto mehr Energie hat er) oder 
-# je mehr Sprache (nicht Gesang oder Rap) ein Song hat desto leiser ist er
-
-
-
-
-
-
+ggsave("Plots/bpm_dance.jpeg", width = 6, height = 4)
+# A BPM of around 120 has the best Danceability
